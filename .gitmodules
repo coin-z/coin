@@ -1,0 +1,9 @@
+[submodule "third_parts/tomlplusplus"]
+	path = third_parts/tomlplusplus
+	url = https://github.com/crazy-toy-coin/tomlplusplus.git
+[submodule "third_parts/nodeeditor"]
+	path = third_parts/nodeeditor
+	url = https://github.com/crazy-toy-coin/nodeeditor.git
+[submodule "third_parts/fmt"]
+	path = third_parts/fmt
+	url = https://github.com/fmtlib/fmt.git

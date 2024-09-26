@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+import os
+import sys
+import time
+import platform
+import subprocess
+import argparse
+from multiprocessing import cpu_count
+
+SUDO = ""
+
+def run_cmd(cmd):
+    ret = os.system(cmd)
+    if ret != 0:
+        sys.exit(-1)
+
+def is_root():
+    return os.geteuid() == 0
+
+def yes_or_no(msg):
+    ans = input(f'{msg}(Y/n):')
+    if ans.lower() == 'y' or ans.lower() == 'yes':
+        return True
+    return False
+
+def root_required():
+    global SUDO
+    if not is_root():
+        SUDO = 'sudo'
+        if not yes_or_no("Root Required"):
+            return False
+        else:
+            subprocess.call(['sudo', 'echo', 'Root Permission Required.'])
+            return True
+    else:
+        SUDO = ''
+        return True
+    
+def job_count():
+    jobs = 1
+    cpu_num = cpu_count()
+    if cpu_num > 2:
+        jobs = int(cpu_num * 0.5)
+    
+    print('build job count: {}'.format(jobs))
+    return jobs
+
+if 'Coin_ROOT' not in os.environ:
+    print("Coin ENV Not Setup!")
+    sys.exit(-1)
+
+build_job_cnt = job_count()
+
+work_directory = os.path.join(os.getcwd(), "../env/coin-env-root/kitbag")
+if not os.path.exists(work_directory):
+    print(f'make dire: {work_directory}')
+    os.makedirs(work_directory)
+
+install_directory = os.environ['Coin_ROOT']
+
+build_type = 'Release'
+
+def add_build_enviable(dep_path):
+    # 设置必要的环境变量
+    if 'CMAKE_PREFIX_PATH' not in os.environ:
+        os.environ['CMAKE_PREFIX_PATH'] = f'{dep_path}'
+    else:
+        cmake_prefix_path = os.environ['CMAKE_PREFIX_PATH']
+        os.environ['CMAKE_PREFIX_PATH'] = f'{dep_path}:{cmake_prefix_path}'
+
+    if 'PKG_CONFIG_PATH' not in os.environ:
+        os.environ['PKG_CONFIG_PATH'] = f'{dep_path}/lib/pkgconfig'
+    else:
+        pkg_config_path = os.environ['PKG_CONFIG_PATH']
+        os.environ['PKG_CONFIG_PATH'] = f'{dep_path}/lib/pkgconfig:{pkg_config_path}'
+
+    if 'LD_LIBRARY_PATH' not in os.environ:
+        os.environ['LD_LIBRARY_PATH'] = f'{dep_path}/lib'
+    else:
+        ld_library_path = os.environ['LD_LIBRARY_PATH']
+        os.environ['LD_LIBRARY_PATH'] = f'{dep_path}/lib:{ld_library_path}'
+
+    if 'C_INCLUDE_PATH' not in os.environ:
+        os.environ['C_INCLUDE_PATH'] = f'{dep_path}/include'
+    else:
+        c_include_path = os.environ['C_INCLUDE_PATH']
+        os.environ['C_INCLUDE_PATH'] = f'{dep_path}/include:{c_include_path}'
+
+    if 'CPLUS_INCLUDE_PATH' not in os.environ:
+        os.environ['CPLUS_INCLUDE_PATH'] = f'{dep_path}/include'
+    else:
+        cplus_include_path = os.environ['CPLUS_INCLUDE_PATH']
+        os.environ['CPLUS_INCLUDE_PATH'] = f'{dep_path}/include:{cplus_include_path}'
+
+
+
+add_build_enviable(install_directory)
+
+###############################################################################
+# 源码获取
+###############################################################################
+
+def git_clone_repo(url, version):
+    repo_url=url
+    repo_ver=version
+    # 使用basename命令提取仓库名
+    repo_name=f"{work_directory}/{repo_url.split('/')[-1].split('.')[0]}"
+    print(f'>>> clone {repo_name}')
+    if os.path.exists(repo_name):
+        cmd = f'cd {repo_name} && git submodule update --init --recursive && cd -'
+    else:
+        cmd = f'git clone --depth 1 --recursive {repo_url} -b {repo_ver} {repo_name}'
+
+    run_cmd(cmd)
+
+
+def clone_kit_repo():
+    # git_clone_repo("https://github.com/boostorg/boost.git", "boost-1.84.0")
+    # git_clone_repo("https://gitlab.com/libeigen/eigen.git", "3.4.0")
+    # git_clone_repo("https://github.com/PointCloudLibrary/pcl.git", "pcl-1.14.0")
+    # git_clone_repo("https://github.com/opencv/opencv.git", "4.9.0")
+    # git_clone_repo("https://gitlab.kitware.com/vtk/vtk.git", "v9.3.0")
+    # git_clone_repo("https://github.com/flann-lib/flann.git", "1.9.2")
+    # git_clone_repo("https://github.com/lz4/lz4.git", "v1.9.4")
+    git_clone_repo("https://github.com/google/filament.git", "v1.50.6")
+    git_clone_repo("https://github.com/osqp/osqp", "v0.6.3")
+
+
+###############################################################################
+# 包构建
+###############################################################################
+
+def build_package(repo, pkg_name, jobs=1):
+
+    repo_path = os.path.join(work_directory, repo)
+    build_path = os.path.join(repo_path, 'build')
+    if os.path.exists(build_path):
+        run_cmd(f'rm -rf {build_path}')
+
+    os.makedirs(build_path)
+
+    cmake_cmd = f'cd {build_path} && cmake -DCMAKE_BUILD_TYPE={build_type} -DCMAKE_INSTALL_PREFIX={install_directory}/kit/{pkg_name} .. && cd -'
+    make_cmd = f'cd {build_path} && make -j{jobs} && {SUDO} make install && cd -'
+    run_cmd(cmake_cmd)
+    run_cmd(make_cmd)
+    add_build_enviable(f'{install_directory}/kit/{pkg_name}')
+
+
+def build_boost(repo, pkg_name):
+    repo_path = os.path.join(work_directory, repo)
+    print(repo_path)
+    bootstrap_cmd = f'cd {repo_path} && ./bootstrap.sh --prefix={install_directory}/kit/{pkg_name} --with-libraries=all && cd -'
+    b2_cmd = f'cd {repo_path} && {SUDO} ./b2 --prefix={install_directory}/kit/{pkg_name} variant={build_type.lower()} install && cd -'
+    
+    run_cmd(bootstrap_cmd)
+    run_cmd(b2_cmd)
+    add_build_enviable(f'{install_directory}/kit/{pkg_name}')
+
+def build_filament(repo, pkg_name):
+    repo_path = os.path.join(work_directory, repo)
+    print(repo_path)
+    include_path = f'{install_directory}/kit/{pkg_name}/include/filament'
+    if not os.path.exists(include_path):
+        run_cmd(f'{SUDO} mkdir -p {include_path}')
+    build_cmd = f'cd {repo_path} && ./build.sh -c && CC=/usr/bin/clang CXX=/usr/bin/clang++ ./build.sh -a {build_type.lower()} && cd -'
+    install_cmd = f'{SUDO} cp -ar {repo_path}/out/{build_type.lower()}/filament/* {install_directory}/kit/{pkg_name}'
+    run_cmd(build_cmd)
+    run_cmd(install_cmd)
+    add_build_enviable(f'{install_directory}/kit/{pkg_name}')
+
+def build_kit_repo():
+
+    # 构建 lz4
+    # build_package('lz4/build/cmake/', 'lz4', jobs=build_job_cnt)
+
+    # 构建 boost 库
+    # build_boost('boost', 'boost', jobs=build_job_cnt)
+
+    # 构建 flann
+    # build_package('flann', 'flann', jobs=build_job_cnt)
+
+    # 构建 eigen
+    # build_package('eigen', 'eigen3', jobs=build_job_cnt)
+
+    # 构建 vtk
+    # build_package('vtk', 'vtk', jobs=4)
+
+    # 构建 pcl
+    # build_package('pcl', 'pcl', jobs=build_job_cnt)
+
+    # 构建 filament
+    build_filament('filament', 'filament')
+
+    # 构建 osqp
+    build_package('osqp', 'osqp', jobs=build_job_cnt)
+
+###############################################################################
+# 包清理
+###############################################################################
+def clean_package(repo):
+    repo_path = os.path.join(work_directory, repo)
+    build_path = os.path.join(repo_path, 'build')
+    if os.path.exists(build_path):
+        run_cmd(f'rm -rf {build_path}')
+def clean_boost(repo):
+    repo_path = os.path.join(work_directory, repo)
+    print(repo_path)
+    bootstrap_cmd = f'cd {repo_path} && ./bootstrap.sh --prefix={install_directory} --with-libraries=all && cd -'
+    b2_cmd = f'cd {repo_path} && {SUDO} ./b2 --clean && cd -'
+    
+    run_cmd(bootstrap_cmd)
+    run_cmd(b2_cmd)
+
+def clean_filament(repo):
+    repo_path = os.path.join(work_directory, repo)
+    print(repo_path)
+
+    clean_cmd = f'cd {repo_path} && ./build.sh -c && cd -'
+    rm_cmd = f'cd {repo_path} && rm -rf ./out && cd -'
+    run_cmd(clean_cmd)
+    run_cmd(rm_cmd)
+
+def clean_kit_repo():
+
+    # # 构建 lz4
+    # clean_package('lz4/build/cmake/')
+
+    # # 构建 boost 库
+    # # clean_boost('boost')
+
+    # # 构建 flann
+    # clean_package('flann')
+
+    # # 构建 eigen
+    # clean_package('eigen')
+
+    # # 构建 vtk
+    # clean_package('vtk')
+
+    # # 构建 pcl
+    # clean_package('pcl')
+
+    # 构建 filament
+    clean_filament('filament')
+
+    # 构建 osqp
+    clean_package('osqp')
+
+if __name__ == '__main__':
+
+    if not root_required():
+        exit(-1)
+
+    parser = argparse.ArgumentParser(description='Setup kit bag for Coin.')
+
+    parser.add_argument('operation', help='apreation to execute')
+
+    args = parser.parse_args()
+    st = time.time()
+    if args.operation == 'clone':
+        print('clone repo now.')
+        clone_kit_repo()
+        print(f'total cost {time.time() - st}s')
+    elif args.operation == 'build':
+        print('build repo now')
+        build_kit_repo()
+        print(f'total cost {time.time() - st}s')
+    elif args.operation == 'clean':
+        print('clean kit bag')
+        clean_kit_repo()
+        print(f'total cost {time.time() - st}s')
+    else:
+        print('unknown operation')

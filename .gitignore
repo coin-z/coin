@@ -1,0 +1,7 @@
+build
+.vscode
+*.tar.gz
+coin-*-Linux
+filament
+kitbag
+env/coin-env-root

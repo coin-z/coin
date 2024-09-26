@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+import os
+import sys
+import shutil
+
+# 获取当前目录位置
+CURRENT_PATH = os.getcwd()
+
+# 设置工程名称和版本号
+PROJECT_NAME = "coin"
+PROJECT_VERSION_MAJOR = "1"
+PROJECT_VERSION_MINOR = "0"
+PROJECT_VERSION_PATCH = "0"
+PROJECT_VERSION = f'{PROJECT_VERSION_MAJOR}.{PROJECT_VERSION_MINOR}.{PROJECT_VERSION_PATCH}'
+
+SOURCE_PATH = f'{CURRENT_PATH}'
+BUILD_PATH = f'/tmp/{PROJECT_NAME}-{PROJECT_VERSION}-build'
+PACKAGE_PATH = f'/tmp/package'
+BUILD_TYPE = f'Debug'
+
+if len(sys.argv) == 2 and sys.argv[1] == 'clean':
+
+    # 检查是否存在 build 目录
+    if os.path.exists(f'{BUILD_PATH}'):
+        shutil.rmtree(f'{BUILD_PATH}')
+
+# 构建工程
+if not os.path.exists(f'{BUILD_PATH}'):
+    os.makedirs(f'{BUILD_PATH}')
+
+#  -D CMAKE_INSTALL_PREFIX={PACKAGE_PATH}
+    os.system(f'cmake -S {SOURCE_PATH} -B {BUILD_PATH} \
+        -DPROJECT_VERSION_MAJOR={PROJECT_VERSION_MAJOR} \
+        -DPROJECT_VERSION_MINOR={PROJECT_VERSION_MINOR} \
+        -DPROJECT_VERSION_PATCH={PROJECT_VERSION_PATCH} \
+        -DPROJECT_VERSION={PROJECT_VERSION} \
+        -DCPACK_PACKAGE_NAME={PROJECT_NAME} \
+        -DCPACK_PACKAGE_VERSION={PROJECT_VERSION} \
+        -DCMAKE_BUILD_TYPE={BUILD_TYPE}')
+
+os.system(f'cmake --build {BUILD_PATH} -j6')
+
+# 打包工程
+if os.path.exists(f"{PACKAGE_PATH}"):
+    shutil.rmtree(f"{PACKAGE_PATH}")
+os.makedirs(f"{PACKAGE_PATH}")
+
+os.chdir(f'{BUILD_PATH}')
+os.system(f'cpack \
+    -G TGZ \
+    -D CPACK_PACKAGE_NAME={PROJECT_NAME} \
+    -D CPACK_PACKAGE_VERSION={PROJECT_VERSION} \
+    -D CPACK_PACKAGE_FILE_NAME={PROJECT_NAME}-{PROJECT_VERSION}-Linux \
+    -C {BUILD_TYPE} \
+    -D CPACK_PACKAGE_DESCRIPTION_SUMMARY="Coin" \
+    -D CPACK_PACKAGE_DESCRIPTION="Coin" \
+    -D CPACK_PACKAGE_VENDOR="Coin" \
+    -D CPACK_PACKAGE_CONTACT="zhoutotong@live.cn" \
+    -B {PACKAGE_PATH} -D CMAKE_INSTALL_PREFIX={PACKAGE_PATH}')
+
+# 返回当前目录
+os.chdir(f'{CURRENT_PATH}')
+
+# 清理构建目录
+shutil.rmtree(f'{BUILD_PATH}')
+
+# 将打完的包移动到当前目录
+TARBALL_NAME = f'{PROJECT_NAME}-{PROJECT_VERSION}-Linux.tar.gz'
+# 如果已经存在则先删除
+if os.path.exists(f'{CURRENT_PATH}/{TARBALL_NAME}'):
+    os.remove(f'{CURRENT_PATH}/{TARBALL_NAME}')
+    
+shutil.move(f'{PACKAGE_PATH}/{TARBALL_NAME}', f'{CURRENT_PATH}')
+
+# 检查是否存在 COIN_ROOT 环境变量
+if os.environ.get('COIN_ROOT') is not None:
+    coin_root = str(os.environ.get('COIN_ROOT'))
+    print(f'Install {PROJECT_NAME} to {coin_root}')
+    # 检查是否存在 COIN_ROOT-x 目录, 如果存在则先删除
+    if os.path.exists(f'{coin_root}'):
+
+        # 检查是否存在 setup.bash/setup.zsh/coin_version 文件，如果不存在则认为不合法，则不执行删除动作
+        file_check_list = ['setup.bash', 'setup.zsh', 'coin_version']
+        for check in file_check_list:
+            if not os.path.exists(f'{coin_root}/{check}'):
+                print(f'Unsafe install path, exit now.')
+                exit(-1)
+
+
+        # print(f'Remove {coin_root} Now...')
+        # shutil.rmtree(f'{coin_root}')
+        # print(f'Remove {coin_root} Done!')
+    
+    # 将安装包解压到 COIN_ROOT 目录
+    print(f'Extract {TARBALL_NAME} to {coin_root}')
+    os.system(f'tar -zxvf {CURRENT_PATH}/{TARBALL_NAME} -C /tmp')
+    os.system(f'sudo cp -ar /tmp/{PROJECT_NAME}-{PROJECT_VERSION}-Linux/* {coin_root}')
+    print(f'Extract {TARBALL_NAME} to {coin_root} Done!')

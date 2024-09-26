@@ -1,0 +1,26 @@
+proto header
+/**
+@brief: message header define.
+*/
+message Header
+ {
+    message Test{
+        string msg: 1;
+    };
+    uint64 idx: 1, =0; // message index, increace per frame
+    string frame: 2;   // message frame id
+    uint64 timestamp: 3, 0; // message timestamp
+    uint64 range: 4, =12, [0, 100];
+}   ;
+// publish system heartbeat
+message Comm {
+    communicator<publisher> int heartbeat;
+    message C {
+        communicator<publisher> int heartbeat01;
+    }
+    ;
+    communicator<subscriber> int readHeart;
+    communicator<publisher> int cnt;
+    communicator<subscriber> int readCnt;
+    communicator<subscriber> uint readCnt01;
+};

@@ -1,0 +1,12 @@
+proto image
+from commons.header import Header
+
+frame Image {
+    Header header: 1;
+    int rows: 2 =0;
+    int cols: 3 =0;
+    int type: 4 =0;
+    int step: 5 =0;
+    int flags: 6 =0;
+    array<uint8> data: 7;
+};

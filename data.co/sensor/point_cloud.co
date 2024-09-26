@@ -1,0 +1,31 @@
+proto point_cloud
+
+from commons.header import Header
+
+frame PointXYZID {
+    double x: 1;
+    double y: 2;
+    double z: 3;
+    double intensity: 4;
+};
+
+frame PointXYZIF {
+    float x: 1;
+    float y: 2;
+    float z: 3;
+    float intensity: 4;
+};
+
+frame PointCloudXYZID {
+    Header header: 1;
+    int width: 2;
+    int height: 3;
+    array<PointXYZID> data: 4;
+};
+
+frame PointCloudXYZIF {
+    Header header: 1;
+    int width: 2;
+    int height: 3;
+    array<PointXYZIF> data: 4;
+};

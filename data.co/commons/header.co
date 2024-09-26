@@ -1,0 +1,10 @@
+proto header
+
+/**
+* @brief 消息头定义
+*/
+frame Header {
+    uint64 timestamp: 1 =0;
+    uint64 index: 2 =0;
+    string id: 3 ="";
+};
